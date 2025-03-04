@@ -4,9 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="adb727fc-9cfd-4874-9b64-24d17dad447f" name="Changes" comment="added Dockerignore file">
+    <list default="true" id="adb727fc-9cfd-4874-9b64-24d17dad447f" name="Changes" comment="added all images inside docker">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -86,7 +86,15 @@
       <option name="project" value="LOCAL" />
       <updated>1741065035358</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="added all images inside docker">
+      <option name="closed" value="true" />
+      <created>1741065495546</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1741065495546</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="UnknownFeatures">
@@ -96,6 +104,7 @@
     <MESSAGE value="initial commit" />
     <MESSAGE value="added Dockerfile" />
     <MESSAGE value="added Dockerignore file" />
-    <option name="LAST_COMMIT_MESSAGE" value="added Dockerignore file" />
+    <MESSAGE value="added all images inside docker" />
+    <option name="LAST_COMMIT_MESSAGE" value="added all images inside docker" />
   </component>
 </project>

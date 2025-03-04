@@ -25,6 +25,8 @@ def process_image(image_filename):
     output_filename = os.path.splitext(image_filename)[0] + ".png"
     output_path = os.path.join(OUTPUT_DIR, output_filename)
 
+    print(f"\n➡️ Processing file ...{image_filename}")
+
     with open(input_path, 'rb') as f:
         files = {'file': (image_filename, f, 'image/jpeg')}
         try:
