@@ -4,10 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="adb727fc-9cfd-4874-9b64-24d17dad447f" name="Changes" comment="added processing file name to logs">
+    <list default="true" id="adb727fc-9cfd-4874-9b64-24d17dad447f" name="Changes" comment="modified scripts">
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/main.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -103,7 +103,15 @@
       <option name="project" value="LOCAL" />
       <updated>1741066310700</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="modified scripts">
+      <option name="closed" value="true" />
+      <created>1741071948366</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1741071948366</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="UnknownFeatures">
@@ -115,6 +123,7 @@
     <MESSAGE value="added Dockerignore file" />
     <MESSAGE value="added all images inside docker" />
     <MESSAGE value="added processing file name to logs" />
-    <option name="LAST_COMMIT_MESSAGE" value="added processing file name to logs" />
+    <MESSAGE value="modified scripts" />
+    <option name="LAST_COMMIT_MESSAGE" value="modified scripts" />
   </component>
 </project>
