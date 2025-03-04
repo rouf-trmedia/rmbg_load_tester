@@ -8,7 +8,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the test script
-COPY .
+COPY . .
 
 # Create directories for images and results
 RUN mkdir -p test_images output
