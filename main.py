@@ -1,33 +1,65 @@
 import os
 import time
+import random
 import requests
 import concurrent.futures
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 import statistics
+from PIL import Image
 
 # Configuration
 API_ENDPOINT = "http://server950.freeconvert.com:8501/upload/"
+#API_ENDPOINT = "http://localhost:8501/upload/"
 INPUT_DIR = "test_images"
 OUTPUT_DIR = "output"
-NORMAL_IMAGES = [f"img{i}.jpg" for i in range(50)]
-LARGE_IMAGE = "large_image.jpg"
+SUMMARY_DIR = "summary"
+FOLDERS = ["w512", "w1080", "w1920", "w2560", "w3840"]
+MAX_CONCURRENT = 10
 
-# Create output directory if it doesn't exist
+# Create output and summary directories if they don't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
+os.makedirs(SUMMARY_DIR, exist_ok=True)
+
+# Create output subdirectories for each resolution
+for folder in FOLDERS:
+    os.makedirs(os.path.join(OUTPUT_DIR, folder), exist_ok=True)
 
 
-def process_image(image_filename):
+def get_image_resolution(image_path):
+    """Get image width and height"""
+    with Image.open(image_path) as img:
+        return img.size  # Returns (width, height)
+
+
+def process_image(image_path):
     """Process a single image through the API and save the result"""
+    # Get relative path for output directory structure
+    rel_path = os.path.relpath(os.path.dirname(image_path), INPUT_DIR)
+    image_filename = os.path.basename(image_path)
 
-    input_path = os.path.join(INPUT_DIR, image_filename)
+    # Create output path maintaining folder structure
     output_filename = os.path.splitext(image_filename)[0] + ".png"
-    output_path = os.path.join(OUTPUT_DIR, output_filename)
+    output_folder = os.path.join(OUTPUT_DIR, rel_path)
+    output_path = os.path.join(output_folder, output_filename)
 
-    print(f"\n➡️ Processing file ...{image_filename}")
+    # Ensure output folder exists
+    os.makedirs(output_folder, exist_ok=True)
 
-    with open(input_path, 'rb') as f:
+    # Get file size in MB
+    file_size = os.path.getsize(image_path) / (1024 * 1024)
+
+    # Get image resolution
+    try:
+        width, height = get_image_resolution(image_path)
+        resolution = f"{width}x{height}"
+    except Exception as e:
+        resolution = "Unknown"
+
+    print(f"\n➡️ Processing {image_path} - Size: {file_size:.2f}MB - Resolution: {resolution}")
+
+    with open(image_path, 'rb') as f:
         files = {'file': (image_filename, f, 'image/jpeg')}
         try:
             start_time = time.time()
@@ -39,257 +71,259 @@ def process_image(image_filename):
             with open(output_path, 'wb') as output_file:
                 output_file.write(response.content)
 
+            print(f"✅ Completed in {processing_time:.2f}s: {os.path.basename(image_path)}")
+
             return {
+                'folder': os.path.basename(os.path.dirname(image_path)),
                 'filename': image_filename,
                 'status': 'success',
                 'processing_time': processing_time,
-                'file_size': os.path.getsize(input_path) / (1024 * 1024)  # Size in MB
+                'file_size': file_size,
+                'resolution': resolution,
+                'width': width,
+                'height': height
             }
         except requests.exceptions.RequestException as e:
             processing_time = time.time() - start_time
+            print(f"❌ Error processing {image_filename}: {str(e)}")
             return {
+                'folder': os.path.basename(os.path.dirname(image_path)),
                 'filename': image_filename,
                 'status': 'error',
                 'error': str(e),
                 'processing_time': processing_time,
-                'file_size': os.path.getsize(input_path) / (1024 * 1024)  # Size in MB
+                'file_size': file_size,
+                'resolution': resolution,
+                'width': width if 'width' in locals() else 0,
+                'height': height if 'height' in locals() else 0
             }
 
 
-def run_large_image_test():
-    """Test processing of the large image"""
-    print("\n➡️ Running large image processing test...")
-    result = process_image(LARGE_IMAGE)
-    return [result]
+def run_sequential_test():
+    """Test sequential processing for each folder"""
+    print("\n" + "=" * 80)
+    print("Running Sequential Test - Processing each image one by one for every folder")
+    print("=" * 80)
 
-
-def run_large_image_batch_test(batch_size=5):
-    """Test batch processing of the large image multiple times"""
-    print(f"\n➡️ Running large image batch processing test ({batch_size} batch size)...")
     results = []
-    for i in tqdm(range(batch_size)):
-        result = process_image(LARGE_IMAGE)
+
+    for folder in FOLDERS:
+        folder_path = os.path.join(INPUT_DIR, folder)
+        if not os.path.exists(folder_path):
+            print(f"Warning: Folder {folder_path} not found, skipping...")
+            continue
+
+        print(f"\n🔹 Processing folder: {folder}")
+        images = [f"img{i}.jpg" for i in range(10)]
+
+        for image in tqdm(images, desc=folder):
+            image_path = os.path.join(folder_path, image)
+            if os.path.exists(image_path):
+                result = process_image(image_path)
+                results.append(result)
+            else:
+                print(f"Warning: Image {image_path} not found, skipping...")
+
+    return results
+
+
+def run_concurrent_test():
+    """Run concurrent tests with incrementing number of workers for each folder"""
+    print("\n" + "=" * 80)
+    print("Running Concurrent Tests - Processing with incrementing concurrency")
+    print("=" * 80)
+
+    all_results = []
+
+    for folder in FOLDERS:
+        folder_path = os.path.join(INPUT_DIR, folder)
+        if not os.path.exists(folder_path):
+            print(f"Warning: Folder {folder_path} not found, skipping...")
+            continue
+
+        # Get list of images in the folder
+        images = [os.path.join(folder_path, f"img{i}.jpg") for i in range(10)]
+        images = [img for img in images if os.path.exists(img)]
+
+        if not images:
+            print(f"No images found in {folder_path}, skipping...")
+            continue
+
+        # Run with incrementing concurrency levels starting from 2
+        for workers in range(2, MAX_CONCURRENT + 1):
+            print(f"\n🔹 Processing folder {folder} with {workers} concurrent workers")
+            results = []
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                future_to_image = {executor.submit(process_image, image): image for image in images}
+                for future in tqdm(concurrent.futures.as_completed(future_to_image), total=len(images),
+                                   desc=f"{folder}-{workers}w"):
+                    try:
+                        result = future.result()
+                        result['concurrency'] = workers  # Add concurrency level to results
+                        results.append(result)
+                    except Exception as e:
+                        print(f"Executor error: {str(e)}")
+
+            # Save results for this concurrency level
+            df = pd.DataFrame(results)
+            df.to_csv(os.path.join(SUMMARY_DIR, f"concurrent_{folder}_w{workers}.csv"), index=False)
+            all_results.extend(results)
+
+            # Pause briefly between tests to allow system to stabilize
+            time.sleep(1)
+
+    return all_results
+
+
+def run_random_test():
+    """Randomly pick 5 files from any folder and process them"""
+    print("\n" + "=" * 80)
+    print("Running Random Test - Processing 5 random images from any folder")
+    print("=" * 80)
+
+    all_image_paths = []
+
+    # Collect all available image paths
+    for folder in FOLDERS:
+        folder_path = os.path.join(INPUT_DIR, folder)
+        if os.path.exists(folder_path):
+            for i in range(10):
+                img_path = os.path.join(folder_path, f"img{i}.jpg")
+                if os.path.exists(img_path):
+                    all_image_paths.append(img_path)
+
+    # Select 5 random images (or fewer if less than 5 are available)
+    sample_size = min(5, len(all_image_paths))
+    selected_images = random.sample(all_image_paths, sample_size)
+
+    print(f"Selected {sample_size} random images for processing")
+
+    results = []
+    for image_path in tqdm(selected_images, desc="Random processing"):
+        result = process_image(image_path)
         results.append(result)
-    return results
-
-
-def run_large_image_concurrent_test(workers=5):
-    """Test concurrent processing of the large image"""
-    print(f"\n➡️ Running large image concurrent processing test ({workers} workers)...")
-    tasks = [LARGE_IMAGE] * workers
-    results = []
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        future_to_image = {executor.submit(process_image, image): image for image in tasks}
-        for future in tqdm(concurrent.futures.as_completed(future_to_image), total=len(tasks)):
-            result = future.result()
-            results.append(result)
 
     return results
 
 
-def run_normal_image_batch_test():
-    """Test batch processing of all normal images sequentially"""
-    print("\n➡️ Running normal image batch processing test...")
-    results = []
-    for image in tqdm(NORMAL_IMAGES):
-        result = process_image(image)
-        results.append(result)
-    return results
+def generate_summary(results):
+    """Generate summary statistics from test results"""
+    if not results:
+        return None
 
-
-def run_normal_image_concurrent_test(workers=10):
-    """Test concurrent processing of normal images"""
-    print(f"\n➡️ Running normal image concurrent processing test ({workers} workers)...")
-    results = []
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-        future_to_image = {executor.submit(process_image, image): image for image in NORMAL_IMAGES}
-        for future in tqdm(concurrent.futures.as_completed(future_to_image), total=len(NORMAL_IMAGES)):
-            result = future.result()
-            results.append(result)
-
-    return results
-
-
-def run_continuous_stress_test(total_requests=500):
-    """Run continuous processing with normal images to reach at least 500 requests"""
-    print(f"\n➡️ Running continuous stress test ({total_requests} requests)...")
-    results = []
-
-    # Calculate how many rounds needed to reach the target
-    cycles_needed = total_requests // len(NORMAL_IMAGES) + 1
-
-    for cycle in range(cycles_needed):
-        print(f"Cycle {cycle + 1}/{cycles_needed}")
-        for image in tqdm(NORMAL_IMAGES, leave=False):
-            if len(results) >= total_requests:
-                break
-            result = process_image(image)
-            results.append(result)
-
-            # Add a small delay to prevent overwhelming the server
-            time.sleep(0.1)
-
-        if len(results) >= total_requests:
-            break
-
-    return results[:total_requests]
-
-
-def generate_summary(all_results):
-    """Generate summary statistics from all test results"""
-    summary = {}
-
-    # Overall stats
-    all_times = [r['processing_time'] for r in all_results if r['status'] == 'success']
-    success_count = len(all_times)
-    error_count = len(all_results) - success_count
-
-    summary['overall'] = {
-        'total_requests': len(all_results),
-        'successful_requests': success_count,
-        'failed_requests': error_count,
-        'success_rate': success_count / len(all_results) * 100,
-        'avg_processing_time': statistics.mean(all_times) if all_times else 0,
-        'min_processing_time': min(all_times) if all_times else 0,
-        'max_processing_time': max(all_times) if all_times else 0,
-        'median_processing_time': statistics.median(all_times) if all_times else 0
-    }
-
-    # Create a DataFrame for detailed analysis
-    df = pd.DataFrame(all_results)
-
-    # Group by test type
-    test_groups = {
-        'large_image_test': df[df['filename'] == LARGE_IMAGE],
-        'normal_images_test': df[df['filename'] != LARGE_IMAGE]
-    }
-
-    for test_name, test_data in test_groups.items():
-        if not test_data.empty:
-            successful_tests = test_data[test_data['status'] == 'success']
-            if not successful_tests.empty:
-                summary[test_name] = {
-                    'count': len(test_data),
-                    'success_count': len(successful_tests),
-                    'avg_time': successful_tests['processing_time'].mean(),
-                    'min_time': successful_tests['processing_time'].min(),
-                    'max_time': successful_tests['processing_time'].max(),
-                    'median_time': successful_tests['processing_time'].median(),
-                    'avg_size_mb': test_data['file_size'].mean()
-                }
-
-    return summary
-
-
-def save_results_to_csv(results, filename):
-    """Save test results to a CSV file"""
     df = pd.DataFrame(results)
-    df.to_csv(filename, index=False)
-    print(f"Results saved to {filename}")
+
+    # Skip summary if no successful results
+    if not df[df['status'] == 'success'].empty:
+        # Group by folder
+        grouped = df.groupby('folder')
+
+        summary = []
+        # Overall stats
+        overall = {
+            'folder': 'All',
+            'total_images': len(df),
+            'successful': sum(df['status'] == 'success'),
+            'failed': sum(df['status'] == 'error'),
+            'avg_time': df[df['status'] == 'success']['processing_time'].mean(),
+            'min_time': df[df['status'] == 'success']['processing_time'].min(),
+            'max_time': df[df['status'] == 'success']['processing_time'].max(),
+            'median_time': df[df['status'] == 'success']['processing_time'].median(),
+            'avg_size_mb': df['file_size'].mean()
+        }
+        summary.append(overall)
+
+        # Stats for each folder
+        for folder, group in grouped:
+            folder_summary = {
+                'folder': folder,
+                'total_images': len(group),
+                'successful': sum(group['status'] == 'success'),
+                'failed': sum(group['status'] == 'error'),
+                'avg_time': group[group['status'] == 'success']['processing_time'].mean(),
+                'min_time': group[group['status'] == 'success']['processing_time'].min(),
+                'max_time': group[group['status'] == 'success']['processing_time'].max(),
+                'median_time': group[group['status'] == 'success']['processing_time'].median(),
+                'avg_size_mb': group['file_size'].mean()
+            }
+            summary.append(folder_summary)
+
+        return pd.DataFrame(summary)
+
+    return pd.DataFrame()
 
 
 def main():
     start_time = time.time()
     all_results = []
 
-    # Check if input directory exists
+    # Verify the input directory exists
     if not os.path.isdir(INPUT_DIR):
         print(f"Error: Input directory '{INPUT_DIR}' not found.")
         return
 
-    # Verify that test images exist
-    large_image_path = os.path.join(INPUT_DIR, LARGE_IMAGE)
-    if not os.path.exists(large_image_path):
-        print(f"Warning: Large image '{LARGE_IMAGE}' not found.")
+    # Check for existence of resolution folders
+    missing_folders = []
+    for folder in FOLDERS:
+        folder_path = os.path.join(INPUT_DIR, folder)
+        if not os.path.exists(folder_path):
+            missing_folders.append(folder)
 
-    missing_normal = []
-    for img in NORMAL_IMAGES:
-        if not os.path.exists(os.path.join(INPUT_DIR, img)):
-            missing_normal.append(img)
+    if missing_folders:
+        print(f"Warning: The following folders were not found: {', '.join(missing_folders)}")
 
-    if missing_normal:
-        print(f"Warning: {len(missing_normal)} normal images not found.")
-        print(f"First few missing: {missing_normal[:5]}")
+    # 1. Sequential processing
+    sequential_results = run_sequential_test()
+    all_results.extend(sequential_results)
 
-    # Run tests and collect results
-    print("Starting API load testing...")
+    # Save sequential results
+    sequential_df = pd.DataFrame(sequential_results)
+    sequential_df.to_csv(os.path.join(SUMMARY_DIR, "sequential_results.csv"), index=False)
 
-    # Test 1: Large image processing
-    results = run_large_image_test()
-    all_results.extend(results)
-    save_results_to_csv(results, "large_image_test_results.csv")
+    # 2. Concurrent processing
+    concurrent_results = run_concurrent_test()
+    all_results.extend(concurrent_results)
 
-    # Test 2: Large image batch processing
-    results = run_large_image_batch_test(batch_size=5)
-    all_results.extend(results)
-    save_results_to_csv(results, "large_image_batch_test_results.csv")
+    # 3. Random processing
+    random_results = run_random_test()
+    all_results.extend(random_results)
 
-    # Test 3: Large image concurrent processing
-    results = run_large_image_concurrent_test(workers=5)
-    all_results.extend(results)
-    save_results_to_csv(results, "large_image_concurrent_test_results.csv")
+    # Save random results
+    random_df = pd.DataFrame(random_results)
+    random_df.to_csv(os.path.join(SUMMARY_DIR, "random_results.csv"), index=False)
 
-    # Test 4: Normal image batch processing
-    results = run_normal_image_batch_test()
-    all_results.extend(results)
-    save_results_to_csv(results, "normal_image_batch_test_results.csv")
+    # Generate and save overall results
+    all_df = pd.DataFrame(all_results)
+    all_df.to_csv(os.path.join(SUMMARY_DIR, "all_results.csv"), index=False)
 
-    # Test 5: Normal image concurrent processing
-    results = run_normal_image_concurrent_test(workers=10)
-    all_results.extend(results)
-    save_results_to_csv(results, "normal_image_concurrent_test_results.csv")
+    # Generate summary
+    summary_df = generate_summary(all_results)
+    if summary_df is not None and not summary_df.empty:
+        summary_df.to_csv(os.path.join(SUMMARY_DIR, "summary.csv"), index=False)
 
-    # Test 6: Continuous stress test
-    results = run_continuous_stress_test(total_requests=500)
-    all_results.extend(results)
-    save_results_to_csv(results, "continuous_stress_test_results.csv")
+        # Display summary
+        print("\n" + "=" * 80)
+        print("BACKGROUND REMOVAL API LOAD TESTING SUMMARY")
+        print("=" * 80)
 
-    # Save all results
-    save_results_to_csv(all_results, "all_test_results.csv")
-
-    # Generate and display summary
-    summary = generate_summary(all_results)
-
-    print("\n" + "=" * 80)
-    print("BACKGROUND REMOVAL API LOAD TESTING SUMMARY")
-    print("=" * 80)
-
-    print("\n🔹 OVERALL STATISTICS:")
-    overall = summary['overall']
-    print(f"Total Requests: {overall['total_requests']}")
-    print(f"Successful Requests: {overall['successful_requests']} ({overall['success_rate']:.2f}%)")
-    print(f"Failed Requests: {overall['failed_requests']}")
-    print(f"Average Processing Time: {overall['avg_processing_time']:.2f}s")
-    print(f"Min/Max Processing Time: {overall['min_processing_time']:.2f}s / {overall['max_processing_time']:.2f}s")
-    print(f"Median Processing Time: {overall['median_processing_time']:.2f}s")
-
-    if 'large_image_test' in summary:
-        print("\n🔹 LARGE IMAGE STATISTICS:")
-        large = summary['large_image_test']
-        print(f"Tests: {large['count']}")
-        print(f"Successful: {large['success_count']}")
-        print(f"Average Time: {large['avg_time']:.2f}s")
-        print(f"Min/Max Time: {large['min_time']:.2f}s / {large['max_time']:.2f}s")
-        print(f"Median Time: {large['median_time']:.2f}s")
-        print(f"Average File Size: {large['avg_size_mb']:.2f} MB")
-
-    if 'normal_images_test' in summary:
-        print("\n🔹 NORMAL IMAGES STATISTICS:")
-        normal = summary['normal_images_test']
-        print(f"Tests: {normal['count']}")
-        print(f"Successful: {normal['success_count']}")
-        print(f"Average Time: {normal['avg_time']:.2f}s")
-        print(f"Min/Max Time: {normal['min_time']:.2f}s / {normal['max_time']:.2f}s")
-        print(f"Median Time: {normal['median_time']:.2f}s")
-        print(f"Average File Size: {normal['avg_size_mb']:.2f} MB")
+        for _, row in summary_df.iterrows():
+            folder = row['folder']
+            print(f"\n🔹 {folder} STATISTICS:")
+            print(f"Total Images: {row['total_images']}")
+            print(f"Successful: {row['successful']} ({row['successful'] / row['total_images'] * 100:.2f}%)")
+            print(f"Failed: {row['failed']}")
+            if not pd.isna(row['avg_time']):
+                print(f"Average Time: {row['avg_time']:.2f}s")
+                print(f"Min/Max Time: {row['min_time']:.2f}s / {row['max_time']:.2f}s")
+                print(f"Median Time: {row['median_time']:.2f}s")
+            print(f"Average File Size: {row['avg_size_mb']:.2f} MB")
 
     total_duration = time.time() - start_time
     print(f"\nTotal Testing Duration: {total_duration:.2f} seconds ({total_duration / 60:.2f} minutes)")
 
     print("\n" + "=" * 80)
-    print("Test completed. All results saved to CSV files.")
+    print("Test completed. All results and summary saved to CSV files.")
     print("=" * 80)
 
 

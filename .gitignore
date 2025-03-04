@@ -1,2 +1,5 @@
 test_images
 output
+.venv
+summary
+/test_images.zip
